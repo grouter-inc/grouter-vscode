@@ -1,0 +1,1013 @@
+{
+  "name": "grouter-code",
+  "displayName": "gRouter",
+  "description": "gRouter coding agent for VS Code — the agent proves it is done. Verify gate, persistence mode (/ralph) and a live HUD, powered by https://prod.grouter.web.id.",
+  "version": "0.4.3",
+  "publisher": "grouter",
+  "author": "gRouter",
+  "license": "MIT",
+  "icon": "assets/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/grouter-inc/grouter-vscode.git"
+  },
+  "homepage": "https://prod.grouter.web.id",
+  "bugs": {
+    "url": "https://github.com/grouter-inc/grouter-vscode/issues"
+  },
+  "engines": {
+    "vscode": "^1.140.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "coding assistant",
+    "mcp",
+    "debugging",
+    "planning",
+    "grouter",
+    "api gateway",
+    "llm"
+  ],
+  "galleryBanner": {
+    "color": "#0f172a",
+    "theme": "dark"
+  },
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "build:dev": "node esbuild.mjs --dev",
+    "watch": "node esbuild.mjs --dev --watch",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"*.mjs\"",
+    "spike:host": "node esbuild.mjs --dev && node dist/host-smoke.js",
+    "gen:tools": "node scripts/gen-tools-manifest.mjs",
+    "package": "node esbuild.mjs && npx @vscode/vsce package --no-dependencies",
+    "vscode:prepublish": "npm run build",
+    "build:tests": "node esbuild.tests.mjs",
+    "test:host": "node esbuild.tests.mjs && node ./test/runTests.mjs",
+    "shots": "node esbuild.shots.mjs && node ./test/runScreenshots.mjs"
+  },
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "grouter.chat",
+        "name": "grouter",
+        "fullName": "gRouter",
+        "description": "AI coding, debugging & planning assistant",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "ask",
+            "description": "Ask about the codebase (read-only)"
+          },
+          {
+            "name": "agent",
+            "description": "Run a coding task with tools"
+          },
+          {
+            "name": "plan",
+            "description": "Create or execute a step-by-step plan"
+          },
+          {
+            "name": "ralph",
+            "description": "Persistence mode: loop until tests actually pass"
+          },
+          {
+            "name": "debug",
+            "description": "Investigate failures with debugger & test state"
+          },
+          {
+            "name": "skills",
+            "description": "List installed skills"
+          },
+          {
+            "name": "mcp",
+            "description": "Show MCP server status"
+          },
+          {
+            "name": "help",
+            "description": "Show gRouter help"
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "grouter.setApiKey",
+        "title": "gRouter: Set API Key"
+      },
+      {
+        "command": "grouter.testConnection",
+        "title": "gRouter: Test Connection"
+      },
+      {
+        "command": "grouter.selectModel",
+        "title": "gRouter: Select Model"
+      },
+      {
+        "command": "grouter.showDiagnostics",
+        "title": "gRouter: Show Diagnostics"
+      },
+      {
+        "command": "grouter.openConfig",
+        "title": "gRouter: Open Config File (~/.grouter/config.json)"
+      },
+      {
+        "command": "grouter.openPlan",
+        "title": "gRouter: Open Plan"
+      },
+      {
+        "command": "grouter.startMcpServer",
+        "title": "gRouter: Start MCP Server"
+      },
+      {
+        "command": "grouter.reconnectMcp",
+        "title": "gRouter: Reconnect MCP Servers"
+      },
+      {
+        "command": "grouter.verifyWork",
+        "title": "gRouter: Verify Work (tests + typecheck)"
+      },
+      {
+        "command": "grouter.showVerifyDetails",
+        "title": "gRouter: Show Last Verification Report"
+      }
+    ],
+    "configuration": {
+      "title": "gRouter",
+      "properties": {
+        "grouter.baseUrl": {
+          "type": "string",
+          "default": "https://prod.grouter.web.id/v1",
+          "description": "gRouter gateway base URL."
+        },
+        "grouter.model": {
+          "type": "string",
+          "default": "",
+          "description": "Default model id (empty = pick from GET /v1/models)."
+        },
+        "grouter.reasoning.show": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show model reasoning/thinking in chat."
+        },
+        "grouter.telemetry.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in anonymous telemetry (event names only, never code or prompts)."
+        },
+        "grouter.mcp.port": {
+          "type": "number",
+          "default": 3987,
+          "description": "Localhost port for the in-editor MCP server (Streamable HTTP)."
+        },
+        "grouter.verify.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Jalankan verify gate: klaim 'selesai' dari agent harus punya bukti (test + typecheck)."
+        },
+        "grouter.verify.blockOnUnverified": {
+          "type": "boolean",
+          "default": true,
+          "description": "Tolak klaim selesai kalau verifikasi masih merah. Kalau dimatikan, agent diberi peringatan tapi turn tetap ditutup."
+        },
+        "grouter.verify.testCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Command test manual. Kosongkan untuk deteksi otomatis (npm test / pytest / cargo test / go test)."
+        },
+        "grouter.verify.typecheckCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Command typecheck manual. Kosongkan untuk deteksi otomatis (tsc --noEmit / npm run check)."
+        },
+        "grouter.verify.timeoutSeconds": {
+          "type": "number",
+          "default": 180,
+          "minimum": 10,
+          "maximum": 600,
+          "description": "Batas waktu per command verifikasi (detik)."
+        },
+        "grouter.ralph.maxIterations": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Jumlah iterasi maksimal untuk mode /ralph (loop sampai verifikasi hijau)."
+        },
+        "grouter.ralph.stallLimit": {
+          "type": "number",
+          "default": 2,
+          "minimum": 2,
+          "maximum": 10,
+          "description": "Berhenti kalau kegagalan yang sama berulang sebanyak ini tanpa progres."
+        },
+        "grouter.hud.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Tampilkan status bar HUD (mode, iterasi, tool calls, token, status verifikasi)."
+        }
+      }
+    },
+    "languageModelTools": [
+      {
+        "name": "grouter_read_file",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "read_file",
+        "displayName": "Read File",
+        "modelDescription": "Read a text file from the workspace. Returns numbered lines. Optionally restrict to a line range (1-based). Use before editing a file.",
+        "userDescription": "Read a workspace file",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative file path"
+            },
+            "startLine": {
+              "description": "First line (1-based)",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "endLine": {
+              "description": "Last line (1-based, inclusive)",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_list_dir",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "list_dir",
+        "displayName": "List Directory",
+        "modelDescription": "List files and directories at a workspace path (defaults to the workspace root).",
+        "userDescription": "List a directory",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "description": "Workspace-relative directory path (default: root)",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_get_workspace_tree",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "get_workspace_tree",
+        "displayName": "Workspace Tree",
+        "modelDescription": "Show a bounded tree of the workspace folders (useful for orientation).",
+        "userDescription": "Show workspace structure",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "depth": {
+              "description": "Max depth (default 2)",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_search_text",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "search_text",
+        "displayName": "Search Text",
+        "modelDescription": "Search file contents in the workspace for a literal string or regular expression. Returns file:line matches.",
+        "userDescription": "Search for text in the workspace",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Literal text or JavaScript regular expression"
+            },
+            "maxResults": {
+              "description": "Max matches (default 50)",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "glob": {
+              "description": "Optional file extension filter, e.g. '.ts' or '.ts,.js'",
+              "type": "string"
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_find_files",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "find_files",
+        "displayName": "Find Files",
+        "modelDescription": "Find files by name pattern (substring or glob-like, e.g. '*.test.ts', 'config'). Returns workspace-relative paths. Faster than search_text when you only need paths.",
+        "userDescription": "Find files by name",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "description": "Name pattern: substring or glob with * (e.g. '*.test.ts')"
+            },
+            "maxResults": {
+              "description": "Max results (default 100)",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          "required": [
+            "pattern"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_apply_patch",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "apply_patch",
+        "displayName": "Apply Patch",
+        "modelDescription": "Replace an exact text block in a file. oldText must match the file content exactly (including whitespace) and must be unique. Use read_file first to copy the exact text. Prefer small targeted edits over rewriting whole files.",
+        "userDescription": "Edit a file (exact text replacement)",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative file path"
+            },
+            "oldText": {
+              "type": "string",
+              "description": "Exact existing text to replace"
+            },
+            "newText": {
+              "type": "string",
+              "description": "Replacement text (empty string deletes the block)"
+            }
+          },
+          "required": [
+            "path",
+            "oldText",
+            "newText"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_write_file",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "write_file",
+        "displayName": "Write File",
+        "modelDescription": "Create or overwrite a file with the given content. For edits to existing files prefer apply_patch.",
+        "userDescription": "Write a file (create or overwrite)",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative file path"
+            },
+            "content": {
+              "type": "string",
+              "description": "Full file content"
+            }
+          },
+          "required": [
+            "path",
+            "content"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_git_status",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "git_status",
+        "displayName": "Git Status",
+        "modelDescription": "Show the working tree status (branch and changed files) as porcelain output.",
+        "userDescription": "Show git status",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_git_diff",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "git_diff",
+        "displayName": "Git Diff",
+        "modelDescription": "Show unstaged (or staged) changes as a unified diff.",
+        "userDescription": "Show git diff",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "staged": {
+              "description": "Show staged changes (default false)",
+              "type": "boolean"
+            },
+            "path": {
+              "description": "Limit diff to this path",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_run_command",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "run_command",
+        "displayName": "Run Command",
+        "modelDescription": "Run a shell command in a terminal and capture its output. Use for builds, tests, and CLI tools. Avoid long-running processes (dev servers).",
+        "userDescription": "Run a terminal command",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "The exact shell command to run"
+            },
+            "cwd": {
+              "description": "Working directory (default: workspace root)",
+              "type": "string"
+            },
+            "timeoutSeconds": {
+              "description": "Timeout (default 120)",
+              "type": "integer",
+              "minimum": 5,
+              "maximum": 300
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_run_tests",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "run_tests",
+        "displayName": "Run Tests",
+        "modelDescription": "Run the project's test command (auto-detected from package.json or overridable) and return a parsed summary with failure details. Use to verify changes or reproduce reported failures.",
+        "userDescription": "Run the project test suite",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "description": "Override test command (default: auto-detect npm test / pytest / cargo test)",
+              "type": "string"
+            },
+            "filter": {
+              "description": "Test name filter (passed to the runner when supported)",
+              "type": "string"
+            },
+            "timeoutSeconds": {
+              "description": "Timeout (default 300)",
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 600
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_verify_work",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "verify_work",
+        "displayName": "Verify Work",
+        "modelDescription": "Run the project's real verification (tests, typecheck, git diff) and return exit codes plus output. Call this BEFORE claiming a task is complete. If anything fails, fix it and call again — never claim done without green evidence.",
+        "userDescription": "Verify the work with tests, typecheck and diff",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "testCommand": {
+              "description": "Override the detected test command",
+              "type": "string"
+            },
+            "typecheckCommand": {
+              "description": "Override the detected typecheck command",
+              "type": "string"
+            },
+            "only": {
+              "description": "Limit which evidence to collect (default: all)",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "tests",
+                  "typecheck",
+                  "diff"
+                ]
+              }
+            },
+            "timeoutSeconds": {
+              "description": "Per-command timeout (default 180)",
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 600
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_fetch_url",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "fetch_url",
+        "displayName": "Fetch URL",
+        "modelDescription": "Fetch a URL (documentation, API reference, changelog) and return its text content, stripped of HTML. Use for looking up external documentation when the installed sources are not enough.",
+        "userDescription": "Fetch a web page (documentation lookup)",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "HTTP(S) URL to fetch"
+            },
+            "maxChars": {
+              "description": "Max characters (default 30000)",
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 100000
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_get_diagnostics",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "get_diagnostics",
+        "displayName": "Get Diagnostics",
+        "modelDescription": "Get current errors and warnings from the language servers (Problems panel). Optionally filter by file path.",
+        "userDescription": "Read workspace diagnostics",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "description": "Filter to a workspace-relative file path",
+              "type": "string"
+            },
+            "severity": {
+              "description": "Filter by severity",
+              "type": "string",
+              "enum": [
+                "error",
+                "warning"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_get_open_editors",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "get_open_editors",
+        "displayName": "Get Open Editors",
+        "modelDescription": "List currently open editor tabs with their paths.",
+        "userDescription": "List open editor tabs",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_get_selection",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "get_selection",
+        "displayName": "Get Selection",
+        "modelDescription": "Get the text currently selected in the active editor (or the full file path if no selection).",
+        "userDescription": "Read the active editor selection",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_get_debug_state",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "get_debug_state",
+        "displayName": "Get Debug State",
+        "modelDescription": "Read the current debugger state: active session, paused threads, stack frames, scopes, and variables. Use when the debugger is stopped at a breakpoint to understand why. Returns empty-state message when no session is active or running.",
+        "userDescription": "Read the debugger state (stack, variables)",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "threadId": {
+              "description": "DAP thread id (default: first thread)",
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "frameIndex": {
+              "description": "Stack frame index (default: 0 = innermost)",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "maxVariables": {
+              "description": "Max variables per scope (default 30)",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_list_breakpoints",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "list_breakpoints",
+        "displayName": "List Breakpoints",
+        "modelDescription": "List all currently set breakpoints with file and line.",
+        "userDescription": "List breakpoints",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_set_breakpoint",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "set_breakpoint",
+        "displayName": "Set Breakpoint",
+        "modelDescription": "Set a breakpoint at a file and line (1-based). Optionally with a condition expression.",
+        "userDescription": "Set a breakpoint",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative file path"
+            },
+            "line": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Line number (1-based)"
+            },
+            "condition": {
+              "description": "Conditional expression, e.g. 'userId === null'",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "line"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_remove_breakpoint",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "remove_breakpoint",
+        "displayName": "Remove Breakpoint",
+        "modelDescription": "Remove the breakpoint at a file and line (1-based).",
+        "userDescription": "Remove a breakpoint",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative file path"
+            },
+            "line": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Line number (1-based)"
+            }
+          },
+          "required": [
+            "path",
+            "line"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_launch_debug",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "launch_debug",
+        "displayName": "Launch Debug Session",
+        "modelDescription": "Start a debug session from a launch configuration. Use with no argument to list available configurations first.",
+        "userDescription": "Start a debug session",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "configuration": {
+              "description": "Launch configuration name from launch.json",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_list_skills",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "list_skills",
+        "displayName": "List Skills",
+        "modelDescription": "List available skills (markdown playbooks) with names, descriptions and triggers. Optionally filter by a query matched against name/description/triggers.",
+        "userDescription": "List available skills",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "description": "Filter text",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_read_skill",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "read_skill",
+        "displayName": "Read Skill",
+        "modelDescription": "Read the full markdown content of a skill by slug. Use before applying a skill's playbook.",
+        "userDescription": "Read a skill's content",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "slug": {
+              "type": "string",
+              "description": "Skill slug, e.g. 'debugging'"
+            }
+          },
+          "required": [
+            "slug"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_create_skill",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "create_skill",
+        "displayName": "Create Skill",
+        "modelDescription": "Create or update a skill as a markdown file in ~/.grouter/skills/. Use when you discover a reusable procedure, pattern, or user preference worth remembering. A skill needs: an objective (what it achieves), goals (checkable outcomes, pipe-separated), triggers (keywords), and a markdown playbook.",
+        "userDescription": "Save a reusable skill (markdown playbook)",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Human-readable skill name"
+            },
+            "description": {
+              "type": "string",
+              "description": "One line: when to use this skill"
+            },
+            "objective": {
+              "type": "string",
+              "description": "What this skill achieves — outcome-focused, one sentence"
+            },
+            "goals": {
+              "type": "string",
+              "description": "3-5 checkable outcomes, pipe-separated: 'Goal one | Goal two'"
+            },
+            "triggers": {
+              "type": "string",
+              "description": "Comma-separated trigger keywords for automatic matching"
+            },
+            "content": {
+              "type": "string",
+              "description": "Markdown playbook: numbered steps, tool names, anti-patterns"
+            },
+            "overwrite": {
+              "description": "Overwrite an existing skill with the same slug",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "description",
+            "objective",
+            "goals",
+            "triggers",
+            "content"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_delete_skill",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "delete_skill",
+        "displayName": "Delete Skill",
+        "modelDescription": "Delete a skill markdown file by slug. Requires approval.",
+        "userDescription": "Delete a skill",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "slug": {
+              "type": "string",
+              "description": "Skill slug to delete"
+            }
+          },
+          "required": [
+            "slug"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "grouter_delegate_to_specialist",
+        "tags": [
+          "grouter"
+        ],
+        "toolReferenceName": "delegate_to_specialist",
+        "displayName": "Delegate to Specialist",
+        "modelDescription": "Delegate a focused investigation or verification task to an isolated specialist sub-agent. Available specialists: explorer (Maps an unfamiliar codebase or area: structure, entry points, key modules, data flow); researcher (Investigates how a library/dependency actually behaves by reading its installed sources and the project's usage); reviewer (Independently reviews recent changes (git diff) for correctness, edge cases, security, and consistency); tester (Runs the test suite and reports raw results with failure analysis). Use this to: explore unfamiliar code before editing, research a dependency's behavior, get an independent review of your changes, or verify work with tests. The specialist runs in its own context and returns a report. Choose the specialist matching the task; write a precise, self-contained task description.",
+        "userDescription": "Run a specialist sub-agent",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "specialist": {
+              "type": "string",
+              "enum": [
+                "explorer",
+                "researcher",
+                "reviewer",
+                "tester"
+              ],
+              "description": "Which specialist to run"
+            },
+            "task": {
+              "type": "string",
+              "description": "Precise, self-contained task description for the specialist"
+            }
+          },
+          "required": [
+            "specialist",
+            "task"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "3.0.69",
+    "@langchain/core": "1.2.17",
+    "@langchain/langgraph": "1.5.0",
+    "@langchain/langgraph-checkpoint": "1.2.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "ai": "7.0.141",
+    "langchain": "1.5.16",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/vscode": "1.140.0",
+    "@vscode/test-electron": "3.1.0",
+    "esbuild": "0.28.2",
+    "eslint": "9.39.5",
+    "prettier": "3.9.10",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.2",
+    "vitest": "5.0.4"
+  }
+}

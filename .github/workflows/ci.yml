@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      GROUTER_API_KEY: ${{ secrets.GROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run check
+
+      - name: Build (production)
+        run: npm run build
+
+      - name: Unit tests
+        run: npx vitest run test/unit
+
+      - name: Integration tests (no live gateway)
+        run: npx vitest run test/integration/mcp.test.ts test/integration/planGraph.test.ts
+
+      - name: Live gateway tests (only when GROUTER_API_KEY is configured)
+        if: ${{ env.GROUTER_API_KEY != '' }}
+        run: npx vitest run test/integration
+
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package VSIX
+        run: npx @vscode/vsce package --no-dependencies
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: grouter-code-vsix
+          path: "*.vsix"

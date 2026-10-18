@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.vsix
+.vscode-test/
+coverage/
+*.log
+
+# scratch files
+_newsha.txt
+_*.txt
+_*.png
